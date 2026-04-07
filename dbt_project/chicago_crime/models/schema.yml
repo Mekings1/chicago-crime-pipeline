@@ -1,0 +1,32 @@
+version: 2
+
+models:
+  - name: stg_chicago_crime
+    description: "Cleaned and typed staging layer for Chicago crime records"
+    columns:
+      - name: crime_id
+        description: "Unique crime record ID"
+        tests:
+          - not_null
+          - unique
+      - name: crime_type
+        tests:
+          - not_null
+      - name: incident_date
+        tests:
+          - not_null
+
+  - name: mart_crimes_by_type
+    description: "Aggregated crime counts and arrest rates per crime type"
+    columns:
+      - name: crime_type
+        tests:
+          - not_null
+          - unique
+
+  - name: mart_crimes_over_time
+    description: "Monthly crime counts per type for time series analysis"
+    columns:
+      - name: month_start
+        tests:
+          - not_null

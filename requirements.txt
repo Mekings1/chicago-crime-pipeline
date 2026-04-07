@@ -1,0 +1,23 @@
+# Data Processing
+pandas
+pyarrow
+
+# API & Cloud
+requests
+boto3
+python-dotenv
+
+# Workflow Orchestration
+prefect
+
+# Utilities
+python-dateutil
+
+#warehousing and analytics
+duckdb 
+dbt-core 
+dbt-duckdb 
+
+# Visualization
+streamlit 
+plotly 
