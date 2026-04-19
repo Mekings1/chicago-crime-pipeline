@@ -77,7 +77,7 @@ fig1 = px.bar(
     title="Top 20 Crime Types by Incident Count (colour = arrest rate)"
 )
 fig1.update_layout(yaxis=dict(autorange="reversed"), height=520)
-st.plotly_chart(fig1, use_container_width=True)
+st.plotly_chart(fig1, width='stretch')
 
 st.divider()
 
@@ -97,7 +97,7 @@ fig2 = px.line(
     title="Total Crimes per Month"
 )
 fig2.update_traces(line_color="#1d6fba", marker_color="#1d6fba")
-fig2.update_layout(height=400)
-st.plotly_chart(fig2, use_container_width=True)
+fig2.update_layout(height=500)
+st.plotly_chart(fig2, width='stretch')
 
 st.caption("Built with Streamlit · DuckDB · dbt · AWS S3")

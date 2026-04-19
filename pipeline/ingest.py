@@ -20,6 +20,11 @@ SOCRATA_URL    = os.getenv("SOCRATA_BASE_URL")
 PAGE_SIZE      = int(os.getenv("PAGE_SIZE", 10000))
 MANIFEST_KEY   = "raw/chicago_crime/manifest.json"
 
+# Custom exceptions ────────────────────────────────────────────────────────────
+class SocrataAccessError(Exception):
+    """Raised when the Socrata API returns 403 — likely a geo-restriction."""
+    pass
+
 # ── S3 helpers ────────────────────────────────────────────────────────────────
 
 def get_s3_client():
@@ -44,7 +49,14 @@ def save_manifest(s3, manifest: dict):
 
 # ── Core tasks ────────────────────────────────────────────────────────────────
 
-@task(name="fetch-month", retries=3, retry_delay_seconds=10)
+@task(
+    name="fetch-month",
+    retries=3,
+    retry_delay_seconds=10,
+    retry_condition_fn=lambda task, task_run, state: not isinstance(
+        state.result(raise_on_failure=False), SocrataAccessError
+    )
+)
 def fetch_month(year: int, month: int) -> pd.DataFrame:
     logger = get_run_logger()
     start = date(year, month, 1)
@@ -64,6 +76,23 @@ def fetch_month(year: int, month: int) -> pd.DataFrame:
             "$order":  "date ASC",
         }
         resp = requests.get(SOCRATA_URL, params=params, timeout=60)
+
+        if resp.status_code == 403:
+            raise SocrataAccessError(
+                "\n"
+                "  403 Forbidden — Access blocked by the data portal.\n"
+                "\n"
+                "  Your IP address may be geo-restricted from accessing\n"
+                "  the Chicago Data Portal (data.cityofchicago.org).\n"
+                "\n"
+                "  To fix this:\n"
+                "    1. Connect to a VPN (US-based server recommended)\n"
+                "    2. Re-run the pipeline once connected\n"
+                "    3. Already ingested months will be skipped automatically\n"
+                "\n"
+                "  Pipeline stopped safely. No data was lost."
+            )
+
         resp.raise_for_status()
 
         chunk = pd.read_csv(io.BytesIO(resp.content), low_memory=False)
@@ -130,7 +159,12 @@ def ingest_pipeline(start_ym: str, end_ym: str):
             logger.info(f"Skipping {key} (already in manifest)")
             continue
 
-        df = fetch_month(year, month)
+        try:
+            df = fetch_month(year, month)
+        except SocrataAccessError as e:
+            logger.error(str(e))
+            logger.error("Stopping pipeline. Connect to a VPN and re-run.")
+            return
 
         if df.empty:
             manifest[key] = "empty"

@@ -3,6 +3,10 @@
 [![Project - Data Engineering Zoomcamp](https://img.shields.io/badge/Project-Data%20Engineering%20Zoomcamp-blue)](https://github.com/DataTalksClub/data-engineering-zoomcamp)
 [![Python - 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![dbt - 1.7+](https://img.shields.io/badge/dbt-1.7+-orange.svg)](https://www.getdbt.com/)
+[![AWS S3](https://img.shields.io/badge/AWS-S3-orange?logo=amazon-aws)](https://aws.amazon.com/s3/)
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-purple?logo=terraform)](https://www.terraform.io/)
+[![Prefect](https://img.shields.io/badge/Orchestration-Prefect-blue?logo=prefect)](https://www.prefect.io/)
+[![Streamlit](https://img.shields.io/badge/Dashboard-Streamlit-red?logo=streamlit)](https://streamlit.io/)
 
 An end-to-end data engineering project built as a capstone for the **Data Engineering Zoomcamp**. This pipeline automates the ingestion of Chicago's open crime data, processes it in a cloud-native environment, and surfaces analytical insights via an interactive dashboard.
 
@@ -44,24 +48,35 @@ The pipeline leverages a "Modern Data Stack" approach with a focus on efficiency
 | **Language** | Python 3.10+ |
 
 ---
+## 📦 Dataset
 
+| Property | Detail |
+|:---|:---|
+| Source | [Chicago Data Portal](https://data.cityofchicago.org/Public-Safety/Crimes-2001-to-Present/ijzp-q8t2) |
+| Coverage | 2001 – present (~8M records) |
+| Format | Socrata API (CSV/JSON) |
+| Key columns | `date`, `primary_type`, `arrest`, `district`, `community_area` |
+
+---
 ## 📂 Project Structure
 
 ```bash
 chicago-crime-pipeline/
-├── terraform/                  # S3 bucket provisioning
-│   └── main.tf
-├── pipeline/
-│   ├── ingest.py               # Prefect ingestion flow (Raw -> S3)
-│   └── warehouse.py            # DuckDB table initialization
+├── assets/                     # Dashboard screenshots
+├── dashboard/
+│   └── app.py                  # Streamlit dashboard application
 ├── dbt_project/
 │   └── chicago_crime/
 │       ├── models/
 │       │   ├── staging/        # stg_chicago_crime.sql (Cleaning/Casting)
 │       │   ├── marts/          # Analytical models (Aggregations)
 │       │   └── schema.yml      # dbt tests and documentation
-├── dashboard/
-│   └── app.py                  # Streamlit dashboard application
+├── pipeline/
+│   ├── ingest.py               # Prefect ingestion flow (Raw -> S3)
+│   └── warehouse.py            # DuckDB table initialization
+│   └── run_pipeline.py         # Master orchestration flow (full run)
+├── terraform/                  # S3 bucket provisioning
+│   └── main.tf
 ├── .env.example                # Environment variable template
 ├── requirements.txt            # Project dependencies
 └── README.md
@@ -69,7 +84,7 @@ chicago-crime-pipeline/
 ```
 ---
 
-## How to Reproduce
+## ▶️ How to Reproduce
 
 ### 1. Prerequisites
 - Python 3.10+
@@ -93,74 +108,106 @@ pip install -r requirements.txt
 
 ### 3. Configure environment
 
+Copy the example file and fill in your values:
+
 ```bash
+# Mac/Linux:
 cp .env.example .env
-# Edit .env with your AWS credentials and bucket name
+# Windows:
+copy .env.example .env
 ```
 
+Your `.env` should look like this:
+
+```
+AWS_ACCESS_KEY_ID=your_access_key_here
+AWS_SECRET_ACCESS_KEY=your_secret_key_here
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-bucket-name-here
+SOCRATA_BASE_URL=https://data.cityofchicago.org/resource/ijzp-q8t2.csv
+PAGE_SIZE=10000
+```
+### 3b. Configure dbt profile
+
+dbt looks for its profile in `~/.dbt/profiles.yml` by default. Add the
+following to that file (create it if it doesn't exist):
+
+```yaml
+chicago_crime:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../../database/chicago_crime.duckdb"
+      threads: 4
+```
+
+> The path is relative to `dbt_project/chicago_crime/` — where dbt runs from. Make sure you run dbt commands from that directory as shown in step 5.
+---
 ### 4. Provision S3 bucket with Terraform
 
 ```bash
 cd terraform
 terraform init
-terraform apply
+terraform apply    # type 'yes' when prompted
 cd ..
 ```
 
-### 5. Ingest data
-
-```bash
-# Ingest a date range (incremental — safe to re-run)
-python pipeline/ingest.py --start 2024-01 --end 2024-06
-```
-
-### 6. Build the warehouse
-
-```bash
-python pipeline/warehouse.py
-```
-
-### 7. Run dbt transformations
-
-```bash
-cd dbt_project/chicago_crime
-dbt run 
-dbt test 
-cd ../..
-```
-
-### 8. Launch the dashboard
-
-```bash
-streamlit run dashboard/app.py
-```
-
-Open `http://localhost:8501` in your browser.
-
-
-### 9. [BONUS] Run the full pipeline
+### 5. Run the full pipeline (recommended)
+This single command runs ingestion → warehouse → dbt → dashboard in sequence:
 
 ```bash
 python pipeline/run_pipeline.py --start 2022-01 --end 2024-12
 ```
 
-This runs ingestion → warehouse → dbt → dashboard in sequence. 
 Open `http://localhost:8501` when it completes.
 
+### 5b. Run steps individually (optional)
+If you prefer to run each step manually:
+
+```bash
+# Ingest only
+python pipeline/ingest.py --start 2024-01 --end 2024-06
+
+# Build warehouse
+python pipeline/warehouse.py
+
+# dbt transformations
+cd dbt_project/chicago_crime
+dbt run
+dbt test
+cd ../..
+
+# Launch the Dashboard
+streamlit run dashboard/app.py
+```
+---
+## 📊 Dashboard
+
+![Crime Type Distribution](assets/crime_type.png)
+![Monthly Crime Trend](assets/crime_trend.png)
+
 ---
 
-## Data Warehouse Design
 
-The raw table is physically sorted by `year → month → primary_type`.
-This mimics Hive-style partitioning within DuckDB — range queries on date
-and filters on crime type scan far fewer rows without a traditional index.
+## 🗄️ Data Warehouse Design
 
-The dbt mart layer is materialised as tables so the dashboard queries are
-instant with no re-aggregation at read time.
+**Partitioning strategy:**
+The raw table is physically sorted by `year → month → primary_type`. This mimics
+Hive-style partitioning within DuckDB — time-range queries scan only the relevant
+row groups, and filtering by crime type within a month has high locality.
+
+**Why this ordering?**
+- Dashboard tile 2 (time series) queries by `year` and `month` → benefits from
+  the first two sort keys
+- Dashboard tile 1 (crime distribution) filters and groups by `primary_type` →
+  benefits from the third sort key
+- Both mart tables are materialised as `TABLE` (not `VIEW`) so the dashboard
+  reads pre-aggregated results instantly with no re-computation at query time
 
 ---
 
-## Incremental Ingestion
+## 🔄 Incremental Ingestion
 
 The pipeline writes a `manifest.json` to S3 after each successful month.
 On re-runs, completed months are skipped automatically. To backfill:
@@ -168,3 +215,13 @@ On re-runs, completed months are skipped automatically. To backfill:
 ```bash
 python pipeline/ingest.py --start 2020-01 --end 2023-12
 ```
+
+---
+## ⚠️ Known Issues
+
+**403 Forbidden during ingestion**
+The Chicago Data Portal may block requests from certain geographic regions
+or IP addresses. If you encounter this error the pipeline will stop cleanly
+and display instructions. Connect to a VPN (US-based server recommended)
+and re-run — already-ingested months are skipped automatically so no
+progress is lost.
