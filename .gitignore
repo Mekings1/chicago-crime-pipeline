@@ -1,5 +1,5 @@
 .env
-*.duckdb
+
 __pycache__/
 .dbt/
 target/
@@ -8,6 +8,6 @@ dbt_packages/
 *.tfstate
 *.tfstate.backup
 venv
-database/
+
 logs
 .terraform.lock.hcl
